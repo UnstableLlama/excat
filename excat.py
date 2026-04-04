@@ -139,7 +139,7 @@ def find_content_bbox(img: Image.Image, threshold: int = 240) -> tuple[int, int,
 def build_background_mask(
     img: Image.Image,
     threshold: int = 200,
-    eye_max_fraction: float = 0.02,
+    eye_max_fraction: float = 0.0015,
 ) -> list[list[bool]]:
     """Flood-fill from image edges to identify background pixels, plus eye whites.
 
