@@ -440,12 +440,52 @@ def build_background_mask(
 # Main generation
 # ---------------------------------------------------------------------------
 
+CAT_STYLES = {
+    "cat": "cat.png",
+    "pixcat": "pixcat.png",
+}
+
+
+def pixelize_interior(img: Image.Image, bg_mask: list[list[bool]], block_size: int = 8) -> Image.Image:
+    """Pixelize only the interior (non-masked) pixels of the image."""
+    result = img.copy()
+    pixels = result.load()
+    w, h = img.size
+
+    for by in range(0, h, block_size):
+        for bx in range(0, w, block_size):
+            # Collect interior pixels in this block
+            interior_pixels = []
+            interior_coords = []
+            for y in range(by, min(by + block_size, h)):
+                for x in range(bx, min(bx + block_size, w)):
+                    if not bg_mask[y][x]:
+                        interior_pixels.append(pixels[x, y])
+                        interior_coords.append((x, y))
+
+            if not interior_pixels:
+                continue
+
+            # Average the interior pixels in this block
+            avg_r = sum(p[0] for p in interior_pixels) // len(interior_pixels)
+            avg_g = sum(p[1] for p in interior_pixels) // len(interior_pixels)
+            avg_b = sum(p[2] for p in interior_pixels) // len(interior_pixels)
+            avg_a = sum(p[3] for p in interior_pixels) // len(interior_pixels)
+
+            # Set all interior pixels in the block to the average
+            for x, y in interior_coords:
+                pixels[x, y] = (avg_r, avg_g, avg_b, avg_a)
+
+    return result
+
+
 def generate_excat(
     cat_path: str,
     config_path: str,
     output_path: str,
     model_name: str,
     border: int = 20,
+    pixel_size: int = 0,
 ) -> None:
     """Generate the quantization signature cat image."""
     layer_bpws = parse_quant_config(config_path)
@@ -522,6 +562,11 @@ def generate_excat(
 
                     pixels[x, y] = (nr, ng, nb, a)
 
+    # Optional pixelization pass
+    if pixel_size > 0:
+        print(f"Pixelizing with block size {pixel_size}...")
+        result = pixelize_interior(result, bg_mask, pixel_size)
+
     result.save(output_path)
     print(f"\nSaved to {output_path} ({side}x{side}px)")
 
@@ -540,9 +585,15 @@ def main():
         help="Model name (used to generate fur pattern). If not provided, will prompt.",
     )
     parser.add_argument(
+        "-s", "--style",
+        default="cat",
+        choices=list(CAT_STYLES.keys()),
+        help="Cat style to use (default: cat). Available: " + ", ".join(CAT_STYLES.keys()),
+    )
+    parser.add_argument(
         "-c", "--cat",
-        default="cat.png",
-        help="Path to base cat image (default: cat.png)",
+        default=None,
+        help="Path to a custom cat image (overrides --style)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -555,16 +606,28 @@ def main():
         default=20,
         help="Border padding in pixels (default: 20)",
     )
+    parser.add_argument(
+        "-p", "--pixelize",
+        type=int,
+        default=0,
+        metavar="SIZE",
+        help="Pixelize the fur with block size (e.g. 8). 0 = off (default)",
+    )
     args = parser.parse_args()
 
     if args.name is None:
         args.name = input("Enter model name: ")
 
+    # Resolve cat image path: --cat overrides --style
+    if args.cat is None:
+        script_dir = Path(__file__).parent
+        args.cat = str(script_dir / CAT_STYLES[args.style])
+
     if args.output is None:
         config_stem = Path(args.config).stem
         args.output = f"excat_{config_stem}.png"
 
-    generate_excat(args.cat, args.config, args.output, args.name, args.border)
+    generate_excat(args.cat, args.config, args.output, args.name, args.border, args.pixelize)
 
 
 if __name__ == "__main__":
