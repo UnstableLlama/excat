@@ -4,7 +4,8 @@ excat - Generate a quantization signature cat image from an ExLlama quant config
 
 Takes a quantization_config.json and a base cat image, slices the cat into
 horizontal bands (one per model layer), and tints each band based on the
-average bits-per-weight of that layer.
+average bits-per-weight of that layer. Overlays a deterministic fur pattern
+derived from the model name hash.
 
 Color scheme (asymmetric gradient):
     2 bpw  ->  Red    (255, 0, 0)       heavily quantized
@@ -13,7 +14,9 @@ Color scheme (asymmetric gradient):
 """
 
 import argparse
+import hashlib
 import json
+import math
 import sys
 from collections import deque
 from pathlib import Path
@@ -56,6 +59,225 @@ def bpw_to_color(bpw: float) -> tuple[int, int, int]:
         )
 
 
+# ---------------------------------------------------------------------------
+# Perlin noise (pure Python, deterministic from seed)
+# ---------------------------------------------------------------------------
+
+class PerlinNoise:
+    """2D Perlin noise generator with deterministic seeding."""
+
+    def __init__(self, seed: int):
+        rng = self._make_rng(seed)
+        self.perm = list(range(256))
+        for i in range(255, 0, -1):
+            j = rng() % (i + 1)
+            self.perm[i], self.perm[j] = self.perm[j], self.perm[i]
+        self.perm *= 2  # double for wrapping
+
+        # 12 gradient directions
+        self.grads = [
+            (1, 1), (-1, 1), (1, -1), (-1, -1),
+            (1, 0), (-1, 0), (0, 1), (0, -1),
+            (1, 1), (-1, 1), (1, -1), (-1, -1),
+        ]
+
+    @staticmethod
+    def _make_rng(seed: int):
+        """Simple LCG random number generator."""
+        state = [seed & 0xFFFFFFFF]
+        def rng():
+            state[0] = (state[0] * 1103515245 + 12345) & 0x7FFFFFFF
+            return state[0]
+        return rng
+
+    @staticmethod
+    def _fade(t: float) -> float:
+        return t * t * t * (t * (t * 6 - 15) + 10)
+
+    @staticmethod
+    def _lerp(a: float, b: float, t: float) -> float:
+        return a + t * (b - a)
+
+    def _grad(self, hash_val: int, x: float, y: float) -> float:
+        g = self.grads[hash_val % 12]
+        return g[0] * x + g[1] * y
+
+    def noise(self, x: float, y: float) -> float:
+        """Return noise value in [-1, 1] for coordinates (x, y)."""
+        xi = int(math.floor(x)) & 255
+        yi = int(math.floor(y)) & 255
+        xf = x - math.floor(x)
+        yf = y - math.floor(y)
+
+        u = self._fade(xf)
+        v = self._fade(yf)
+
+        aa = self.perm[self.perm[xi] + yi]
+        ab = self.perm[self.perm[xi] + yi + 1]
+        ba = self.perm[self.perm[xi + 1] + yi]
+        bb = self.perm[self.perm[xi + 1] + yi + 1]
+
+        x1 = self._lerp(self._grad(aa, xf, yf), self._grad(ba, xf - 1, yf), u)
+        x2 = self._lerp(self._grad(ab, xf, yf - 1), self._grad(bb, xf - 1, yf - 1), u)
+
+        return self._lerp(x1, x2, v)
+
+    def octave_noise(self, x: float, y: float, octaves: int = 4, persistence: float = 0.5) -> float:
+        """Fractal noise with multiple octaves. Returns value in ~[-1, 1]."""
+        total = 0.0
+        amplitude = 1.0
+        frequency = 1.0
+        max_val = 0.0
+        for _ in range(octaves):
+            total += self.noise(x * frequency, y * frequency) * amplitude
+            max_val += amplitude
+            amplitude *= persistence
+            frequency *= 2.0
+        return total / max_val
+
+
+# ---------------------------------------------------------------------------
+# Pattern generation (seeded from model name)
+# ---------------------------------------------------------------------------
+
+PATTERN_TYPES = ["tabby_mackerel", "tabby_classic", "splotches", "spotted"]
+
+
+def hash_model_name(name: str) -> dict:
+    """Hash a model name and derive all pattern parameters deterministically."""
+    h = hashlib.sha256(name.encode()).hexdigest()
+
+    # Use different slices of the hash for different parameters
+    seed = int(h[:8], 16)
+    pattern_idx = int(h[8:10], 16) % len(PATTERN_TYPES)
+    scale = 3.0 + (int(h[10:12], 16) / 255.0) * 4.0       # 3.0 - 7.0
+    threshold = 0.15 + (int(h[12:14], 16) / 255.0) * 0.20  # 0.15 - 0.35
+    angle = (int(h[14:16], 16) / 255.0) * math.pi           # 0 - pi
+    stripe_freq = 6.0 + (int(h[16:18], 16) / 255.0) * 6.0  # 6.0 - 12.0
+    warp = 0.3 + (int(h[18:20], 16) / 255.0) * 0.7         # 0.3 - 1.0
+    density = 0.20 + (int(h[20:22], 16) / 255.0) * 0.15    # 0.20 - 0.35
+    octaves = 3 + int(h[22:24], 16) % 3                     # 3 - 5
+    spot_count = 15 + int(h[24:26], 16) % 25                # 15 - 39
+
+    params = {
+        "seed": seed,
+        "pattern_type": PATTERN_TYPES[pattern_idx],
+        "scale": scale,
+        "threshold": threshold,
+        "angle": angle,
+        "stripe_freq": stripe_freq,
+        "warp": warp,
+        "density": density,
+        "octaves": octaves,
+        "spot_count": spot_count,
+    }
+    return params
+
+
+def generate_pattern(w: int, h: int, params: dict) -> list[list[float]]:
+    """Generate a fur pattern as a 2D grid of darkness values in [0, 1].
+
+    0 = no marking, 1 = full black marking.
+    """
+    perlin = PerlinNoise(params["seed"])
+    pattern = [[0.0] * w for _ in range(h)]
+    ptype = params["pattern_type"]
+
+    cos_a = math.cos(params["angle"])
+    sin_a = math.sin(params["angle"])
+
+    # Marking darkness: how dark the black markings are (0.6 = 60% darkened)
+    marking = 0.6
+
+    if ptype == "tabby_mackerel":
+        # Wavy stripes: sine wave with gentle noise displacement
+        freq = params["stripe_freq"]
+        warp_strength = params["warp"] * 0.4
+        scale = params["scale"] * 0.7
+        density = params["density"]
+        stripe_width = 0.15 + density * 0.12
+
+        for y in range(h):
+            for x in range(w):
+                nx = x / w
+                ny = y / h
+                rx = nx * cos_a + ny * sin_a
+                warp_val = perlin.octave_noise(nx * scale, ny * scale, 2)
+                stripe = math.sin((rx + warp_val * warp_strength) * freq * math.pi * 2)
+                cutoff = 1.0 - stripe_width
+                if stripe > cutoff:
+                    pattern[y][x] = marking
+
+    elif ptype == "tabby_classic":
+        # Swirly/bulls-eye pattern: noise thresholded into organic blobs
+        scale = params["scale"]
+        threshold = params["threshold"]
+
+        for y in range(h):
+            for x in range(w):
+                nx = x / w
+                ny = y / h
+                n1 = perlin.octave_noise(nx * scale, ny * scale, params["octaves"])
+                n2 = perlin.octave_noise(
+                    nx * scale * 0.5 + 100, ny * scale * 0.5 + 100, 2
+                )
+                combined = n1 + n2 * 0.3
+                if combined > threshold:
+                    pattern[y][x] = marking
+
+    elif ptype == "splotches":
+        # Large irregular patches using low-frequency noise
+        scale = params["scale"] * 0.6
+        threshold = params["threshold"] + 0.05
+
+        for y in range(h):
+            for x in range(w):
+                nx = x / w
+                ny = y / h
+                n = perlin.octave_noise(nx * scale, ny * scale, 3, persistence=0.6)
+                detail = perlin.octave_noise(nx * scale * 3, ny * scale * 3, 2) * 0.15
+                combined = n + detail
+                if combined > threshold:
+                    pattern[y][x] = marking
+
+    elif ptype == "spotted":
+        # Spots using Voronoi-like approach seeded from hash
+        rng_state = [params["seed"]]
+        def rng_float():
+            rng_state[0] = (rng_state[0] * 1103515245 + 12345) & 0x7FFFFFFF
+            return rng_state[0] / 0x7FFFFFFF
+
+        spot_count = params["spot_count"]
+        spots = []
+        for _ in range(spot_count):
+            sx = rng_float()
+            sy = rng_float()
+            radius = 0.02 + rng_float() * 0.04
+            spots.append((sx, sy, radius))
+
+        scale = params["scale"]
+        for y in range(h):
+            for x in range(w):
+                nx = x / w
+                ny = y / h
+                warp_x = perlin.noise(nx * scale, ny * scale) * 0.03
+                warp_y = perlin.noise(nx * scale + 50, ny * scale + 50) * 0.03
+                wnx = nx + warp_x
+                wny = ny + warp_y
+
+                for sx, sy, sr in spots:
+                    dist = math.sqrt((wnx - sx) ** 2 + (wny - sy) ** 2)
+                    if dist < sr * 0.85:  # hard edge slightly inside radius
+                        pattern[y][x] = marking
+                        break
+
+    return pattern
+
+
+# ---------------------------------------------------------------------------
+# Config parsing
+# ---------------------------------------------------------------------------
+
 def parse_quant_config(config_path: str) -> list[float]:
     """Parse a quantization_config.json and return average bpw per layer."""
     with open(config_path) as f:
@@ -86,6 +308,10 @@ def parse_quant_config(config_path: str) -> list[float]:
         for _, bpws in sorted(layer_bpws.items())
     ]
 
+
+# ---------------------------------------------------------------------------
+# Image processing
+# ---------------------------------------------------------------------------
 
 def find_content_bbox(img: Image.Image, threshold: int = 240) -> tuple[int, int, int, int]:
     """Find the bounding box of non-white content in the image."""
@@ -210,10 +436,15 @@ def build_background_mask(
     return mask
 
 
+# ---------------------------------------------------------------------------
+# Main generation
+# ---------------------------------------------------------------------------
+
 def generate_excat(
     cat_path: str,
     config_path: str,
     output_path: str,
+    model_name: str,
     border: int = 20,
 ) -> None:
     """Generate the quantization signature cat image."""
@@ -223,6 +454,13 @@ def generate_excat(
     for i, bpw in enumerate(layer_bpws):
         color = bpw_to_color(bpw)
         print(f"  Layer {i:3d}: {bpw:.3f} bpw -> RGB{color}")
+
+    # Derive pattern from model name
+    params = hash_model_name(model_name)
+    print(f"\nModel: {model_name}")
+    print(f"  Pattern: {params['pattern_type']}")
+    print(f"  Scale: {params['scale']:.2f}, Angle: {math.degrees(params['angle']):.1f}deg")
+    print(f"  Density: {params['density']:.2f}, Threshold: {params['threshold']:.2f}")
 
     # Load and crop the cat image
     cat = Image.open(cat_path).convert("RGBA")
@@ -241,6 +479,10 @@ def generate_excat(
 
     # Build background mask via flood-fill from edges
     bg_mask = build_background_mask(canvas)
+
+    # Generate fur pattern
+    print("\nGenerating fur pattern...")
+    fur_pattern = generate_pattern(side, side, params)
 
     # Determine the cat content region on the canvas for slicing
     cat_top = offset_y
@@ -270,6 +512,14 @@ def generate_excat(
                     nr = int(r + blend * (color[0] - r))
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
+
+                    # Apply fur pattern as black markings on top
+                    fur = fur_pattern[y][x]
+                    if fur > 0:
+                        nr = int(nr * (1.0 - fur))
+                        ng = int(ng * (1.0 - fur))
+                        nb = int(nb * (1.0 - fur))
+
                     pixels[x, y] = (nr, ng, nb, a)
 
     result.save(output_path)
@@ -283,6 +533,11 @@ def main():
     parser.add_argument(
         "config",
         help="Path to quantization_config.json",
+    )
+    parser.add_argument(
+        "-n", "--name",
+        default=None,
+        help="Model name (used to generate fur pattern). If not provided, will prompt.",
     )
     parser.add_argument(
         "-c", "--cat",
@@ -302,11 +557,14 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.name is None:
+        args.name = input("Enter model name: ")
+
     if args.output is None:
         config_stem = Path(args.config).stem
         args.output = f"excat_{config_stem}.png"
 
-    generate_excat(args.cat, args.config, args.output, args.border)
+    generate_excat(args.cat, args.config, args.output, args.name, args.border)
 
 
 if __name__ == "__main__":
