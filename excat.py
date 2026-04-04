@@ -644,9 +644,9 @@ def main():
     parser.add_argument(
         "-d", "--detail-radius",
         type=int,
-        default=0,
+        default=2,
         metavar="PX",
-        help="Buffer zone around outlines where fur markings won't appear (default: 0, off)",
+        help="Buffer zone around outlines where fur markings won't appear (default: 2)",
     )
     args = parser.parse_args()
 
