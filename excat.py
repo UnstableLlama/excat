@@ -581,12 +581,13 @@ def generate_excat(
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
 
-                    # Apply fur pattern, but not near outlines
-                    fur = fur_pattern[y][x]
-                    if fur > 0 and not detail_buf[y][x]:
-                        nr = int(nr * (1.0 - fur))
-                        ng = int(ng * (1.0 - fur))
-                        nb = int(nb * (1.0 - fur))
+                    # Apply fur pattern, but not in the detail buffer zone
+                    if not detail_buf[y][x]:
+                        fur = fur_pattern[y][x]
+                        if fur > 0:
+                            nr = int(nr * (1.0 - fur))
+                            ng = int(ng * (1.0 - fur))
+                            nb = int(nb * (1.0 - fur))
 
                     pixels[x, y] = (nr, ng, nb, a)
 
