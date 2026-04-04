@@ -26,7 +26,7 @@ from PIL import Image
 
 # --- Color constants ---
 COLOR_RED = (255, 0, 0)       # 2 bpw
-COLOR_ORANGE = (255, 165, 0)  # 4 bpw
+COLOR_ORANGE = (255, 140, 0)  # 4 bpw
 COLOR_YELLOW = (255, 255, 0)  # 8 bpw
 
 BPW_LOW = 2.0
@@ -186,8 +186,8 @@ def generate_pattern(w: int, h: int, params: dict) -> list[list[float]]:
     cos_a = math.cos(params["angle"])
     sin_a = math.sin(params["angle"])
 
-    # Marking darkness: how dark the black markings are (0.6 = 60% darkened)
-    marking = 0.6
+    # Marking darkness: how dark the black markings are (0.9 = near black)
+    marking = 0.9
 
     if ptype == "tabby_mackerel":
         # Wavy stripes: sine wave with gentle noise displacement
