@@ -584,7 +584,11 @@ def generate_excat(
                 r, g, b, a = pixels[x, y]
                 brightness = (r + g + b) / 3
                 if brightness > 120:
-                    blend = min(1.0, (brightness - 120) / 135.0)
+                    # Detail buffer pixels get full tint to avoid white halos
+                    if detail_buf[y][x]:
+                        blend = 1.0
+                    else:
+                        blend = min(1.0, (brightness - 120) / 135.0)
                     nr = int(r + blend * (color[0] - r))
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
