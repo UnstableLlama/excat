@@ -136,41 +136,78 @@ def find_content_bbox(img: Image.Image, threshold: int = 240) -> tuple[int, int,
     return (left, top, right + 1, bottom + 1)
 
 
-def build_background_mask(img: Image.Image, threshold: int = 200) -> list[list[bool]]:
-    """Flood-fill from image edges to identify background pixels.
+def build_background_mask(
+    img: Image.Image,
+    threshold: int = 200,
+    eye_max_fraction: float = 0.02,
+) -> list[list[bool]]:
+    """Flood-fill from image edges to identify background pixels, plus eye whites.
 
-    Returns a 2D boolean grid where True = background (outside the outlines).
+    Returns a 2D boolean grid where True = masked (don't tint).
+    Also detects small enclosed white regions (eye whites) by finding interior
+    white blobs smaller than eye_max_fraction of total image area.
     """
     gray = img.convert("L")
     pixels = gray.load()
     w, h = gray.size
 
-    is_bg = [[False] * w for _ in range(h)]
+    mask = [[False] * w for _ in range(h)]
     queue = deque()
 
     # Seed from all edge pixels that are light enough
     for x in range(w):
         for y in (0, h - 1):
-            if pixels[x, y] > threshold and not is_bg[y][x]:
-                is_bg[y][x] = True
+            if pixels[x, y] > threshold and not mask[y][x]:
+                mask[y][x] = True
                 queue.append((x, y))
     for y in range(h):
         for x in (0, w - 1):
-            if pixels[x, y] > threshold and not is_bg[y][x]:
-                is_bg[y][x] = True
+            if pixels[x, y] > threshold and not mask[y][x]:
+                mask[y][x] = True
                 queue.append((x, y))
 
-    # BFS flood fill through light pixels
+    # BFS flood fill through light pixels (background)
     while queue:
         cx, cy = queue.popleft()
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             nx, ny = cx + dx, cy + dy
-            if 0 <= nx < w and 0 <= ny < h and not is_bg[ny][nx]:
+            if 0 <= nx < w and 0 <= ny < h and not mask[ny][nx]:
                 if pixels[nx, ny] > threshold:
-                    is_bg[ny][nx] = True
+                    mask[ny][nx] = True
                     queue.append((nx, ny))
 
-    return is_bg
+    # Now find small enclosed white regions (eyes, highlights, etc.)
+    # These are light pixels that weren't reached by the background flood-fill
+    visited = [[False] * w for _ in range(h)]
+    max_eye_pixels = int(w * h * eye_max_fraction)
+
+    for sy in range(h):
+        for sx in range(w):
+            if visited[sy][sx] or mask[sy][sx]:
+                continue
+            if pixels[sx, sy] <= threshold:
+                visited[sy][sx] = True
+                continue
+            # Found an unvisited light interior pixel - flood fill to measure the blob
+            blob = []
+            queue.append((sx, sy))
+            visited[sy][sx] = True
+            while queue:
+                cx, cy = queue.popleft()
+                blob.append((cx, cy))
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < w and 0 <= ny < h and not visited[ny][nx]:
+                        visited[ny][nx] = True
+                        if pixels[nx, ny] > threshold:
+                            queue.append((nx, ny))
+
+            # If the blob is small enough, it's likely an eye/highlight - mask it
+            if len(blob) <= max_eye_pixels:
+                for bx, by in blob:
+                    mask[by][bx] = True
+
+    return mask
 
 
 def generate_excat(
