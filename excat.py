@@ -364,7 +364,7 @@ def find_content_bbox(img: Image.Image, threshold: int = 240) -> tuple[int, int,
 
 def build_background_mask(
     img: Image.Image,
-    threshold: int = 200,
+    threshold: int = 230,
     eye_max_fraction: float = 0.0015,
 ) -> list[list[bool]]:
     """Flood-fill from image edges to identify background pixels, plus eye whites.
@@ -574,9 +574,8 @@ def generate_excat(
                     continue
                 r, g, b, a = pixels[x, y]
                 brightness = (r + g + b) / 3
-                if brightness > 200:
-                    blend = (brightness - 200) / 55.0
-                    blend = min(1.0, blend)
+                if brightness > 120:
+                    blend = min(1.0, (brightness - 120) / 135.0)
                     nr = int(r + blend * (color[0] - r))
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
@@ -645,9 +644,9 @@ def main():
     parser.add_argument(
         "-d", "--detail-radius",
         type=int,
-        default=1,
+        default=0,
         metavar="PX",
-        help="Buffer zone around outlines where fur markings won't appear (default: 1)",
+        help="Buffer zone around outlines where fur markings won't appear (default: 0, off)",
     )
     args = parser.parse_args()
 
