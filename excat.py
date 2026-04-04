@@ -15,9 +15,10 @@ Color scheme (asymmetric gradient):
 import argparse
 import json
 import sys
+from collections import deque
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 
 # --- Color constants ---
@@ -135,6 +136,43 @@ def find_content_bbox(img: Image.Image, threshold: int = 240) -> tuple[int, int,
     return (left, top, right + 1, bottom + 1)
 
 
+def build_background_mask(img: Image.Image, threshold: int = 200) -> list[list[bool]]:
+    """Flood-fill from image edges to identify background pixels.
+
+    Returns a 2D boolean grid where True = background (outside the outlines).
+    """
+    gray = img.convert("L")
+    pixels = gray.load()
+    w, h = gray.size
+
+    is_bg = [[False] * w for _ in range(h)]
+    queue = deque()
+
+    # Seed from all edge pixels that are light enough
+    for x in range(w):
+        for y in (0, h - 1):
+            if pixels[x, y] > threshold and not is_bg[y][x]:
+                is_bg[y][x] = True
+                queue.append((x, y))
+    for y in range(h):
+        for x in (0, w - 1):
+            if pixels[x, y] > threshold and not is_bg[y][x]:
+                is_bg[y][x] = True
+                queue.append((x, y))
+
+    # BFS flood fill through light pixels
+    while queue:
+        cx, cy = queue.popleft()
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < w and 0 <= ny < h and not is_bg[ny][nx]:
+                if pixels[nx, ny] > threshold:
+                    is_bg[ny][nx] = True
+                    queue.append((nx, ny))
+
+    return is_bg
+
+
 def generate_excat(
     cat_path: str,
     config_path: str,
@@ -164,6 +202,9 @@ def generate_excat(
     offset_y = (side - ch) // 2
     canvas.paste(cat_cropped, (offset_x, offset_y), cat_cropped)
 
+    # Build background mask via flood-fill from edges
+    bg_mask = build_background_mask(canvas)
+
     # Determine the cat content region on the canvas for slicing
     cat_top = offset_y
     cat_bottom = offset_y + ch
@@ -172,7 +213,7 @@ def generate_excat(
     result = canvas.copy()
     pixels = result.load()
 
-    # For each layer, compute the horizontal band and tint white/light pixels
+    # For each layer, compute the horizontal band and tint interior pixels only
     for layer_idx, bpw in enumerate(layer_bpws):
         color = bpw_to_color(bpw)
 
@@ -182,13 +223,12 @@ def generate_excat(
 
         for y in range(band_top, band_bottom):
             for x in range(side):
+                if bg_mask[y][x]:
+                    continue
                 r, g, b, a = pixels[x, y]
-                # Tint pixels that are light (white or near-white)
-                # Preserve dark pixels (outlines) as-is
                 brightness = (r + g + b) / 3
                 if brightness > 200:
-                    # Blend: the lighter the pixel, the more tint we apply
-                    blend = (brightness - 200) / 55.0  # 0 at 200, 1 at 255
+                    blend = (brightness - 200) / 55.0
                     blend = min(1.0, blend)
                     nr = int(r + blend * (color[0] - r))
                     ng = int(g + blend * (color[1] - g))
