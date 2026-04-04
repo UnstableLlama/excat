@@ -446,34 +446,43 @@ CAT_STYLES = {
 }
 
 
-def pixelize_interior(img: Image.Image, bg_mask: list[list[bool]], block_size: int = 8) -> Image.Image:
-    """Pixelize only the interior (non-masked) pixels of the image."""
+def pixelize_interior(
+    img: Image.Image,
+    bg_mask: list[list[bool]],
+    detail_buf: list[list[bool]],
+    block_size: int = 8,
+) -> Image.Image:
+    """Pixelize only the interior (non-masked) pixels of the image.
+
+    Detail buffer pixels are excluded from averaging so the clean
+    quant-colored border around outlines is preserved.
+    """
     result = img.copy()
     pixels = result.load()
     w, h = img.size
 
     for by in range(0, h, block_size):
         for bx in range(0, w, block_size):
-            # Collect interior pixels in this block
-            interior_pixels = []
-            interior_coords = []
+            # Collect pixels eligible for pixelization (interior, not detail buffer)
+            block_pixels = []
+            block_coords = []
             for y in range(by, min(by + block_size, h)):
                 for x in range(bx, min(bx + block_size, w)):
-                    if not bg_mask[y][x]:
-                        interior_pixels.append(pixels[x, y])
-                        interior_coords.append((x, y))
+                    if not bg_mask[y][x] and not detail_buf[y][x]:
+                        block_pixels.append(pixels[x, y])
+                        block_coords.append((x, y))
 
-            if not interior_pixels:
+            if not block_pixels:
                 continue
 
-            # Average the interior pixels in this block
-            avg_r = sum(p[0] for p in interior_pixels) // len(interior_pixels)
-            avg_g = sum(p[1] for p in interior_pixels) // len(interior_pixels)
-            avg_b = sum(p[2] for p in interior_pixels) // len(interior_pixels)
-            avg_a = sum(p[3] for p in interior_pixels) // len(interior_pixels)
+            # Average the eligible pixels in this block
+            avg_r = sum(p[0] for p in block_pixels) // len(block_pixels)
+            avg_g = sum(p[1] for p in block_pixels) // len(block_pixels)
+            avg_b = sum(p[2] for p in block_pixels) // len(block_pixels)
+            avg_a = sum(p[3] for p in block_pixels) // len(block_pixels)
 
-            # Set all interior pixels in the block to the average
-            for x, y in interior_coords:
+            # Set only eligible pixels to the average
+            for x, y in block_coords:
                 pixels[x, y] = (avg_r, avg_g, avg_b, avg_a)
 
     return result
@@ -593,7 +602,7 @@ def generate_excat(
     # Optional pixelization pass
     if pixel_size > 0:
         print(f"Pixelizing with block size {pixel_size}...")
-        result = pixelize_interior(result, bg_mask, pixel_size)
+        result = pixelize_interior(result, bg_mask, detail_buf, pixel_size)
 
     result.save(output_path)
     print(f"\nSaved to {output_path} ({side}x{side}px)")
