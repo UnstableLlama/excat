@@ -479,6 +479,30 @@ def pixelize_interior(img: Image.Image, bg_mask: list[list[bool]], block_size: i
     return result
 
 
+def build_detail_buffer(img: Image.Image, radius: int = 1, dark_threshold: int = 100) -> list[list[bool]]:
+    """Create a buffer zone around dark pixels (outlines/details).
+
+    Returns a 2D boolean grid where True = near an outline (don't apply fur).
+    """
+    gray = img.convert("L")
+    pixels = gray.load()
+    w, h = gray.size
+
+    buffer = [[False] * w for _ in range(h)]
+
+    # Find all dark pixels, then mark their neighbors within radius
+    for y in range(h):
+        for x in range(w):
+            if pixels[x, y] < dark_threshold:
+                for dy in range(-radius, radius + 1):
+                    for dx in range(-radius, radius + 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < w and 0 <= ny < h:
+                            buffer[ny][nx] = True
+
+    return buffer
+
+
 def generate_excat(
     cat_path: str,
     config_path: str,
@@ -486,6 +510,7 @@ def generate_excat(
     model_name: str,
     border: int = 20,
     pixel_size: int = 0,
+    detail_radius: int = 1,
 ) -> None:
     """Generate the quantization signature cat image."""
     layer_bpws = parse_quant_config(config_path)
@@ -520,6 +545,9 @@ def generate_excat(
     # Build background mask via flood-fill from edges
     bg_mask = build_background_mask(canvas)
 
+    # Build detail buffer to protect outlines from fur markings
+    detail_buf = build_detail_buffer(canvas, radius=detail_radius)
+
     # Generate fur pattern
     print("\nGenerating fur pattern...")
     fur_pattern = generate_pattern(side, side, params)
@@ -553,9 +581,9 @@ def generate_excat(
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
 
-                    # Apply fur pattern as black markings on top
+                    # Apply fur pattern, but not near outlines
                     fur = fur_pattern[y][x]
-                    if fur > 0:
+                    if fur > 0 and not detail_buf[y][x]:
                         nr = int(nr * (1.0 - fur))
                         ng = int(ng * (1.0 - fur))
                         nb = int(nb * (1.0 - fur))
@@ -613,6 +641,13 @@ def main():
         metavar="SIZE",
         help="Pixelize the fur with block size (e.g. 8). 0 = off (default)",
     )
+    parser.add_argument(
+        "-d", "--detail-radius",
+        type=int,
+        default=1,
+        metavar="PX",
+        help="Buffer zone around outlines where fur markings won't appear (default: 1)",
+    )
     args = parser.parse_args()
 
     if args.name is None:
@@ -627,7 +662,7 @@ def main():
         config_stem = Path(args.config).stem
         args.output = f"excat_{config_stem}.png"
 
-    generate_excat(args.cat, args.config, args.output, args.name, args.border, args.pixelize)
+    generate_excat(args.cat, args.config, args.output, args.name, args.border, args.pixelize, args.detail_radius)
 
 
 if __name__ == "__main__":
