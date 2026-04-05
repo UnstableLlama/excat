@@ -640,15 +640,9 @@ def main():
         help="Model name (used to generate fur pattern). If not provided, will prompt.",
     )
     parser.add_argument(
-        "-s", "--style",
+        "-i", "--image",
         default="cat",
-        choices=list(CAT_STYLES.keys()),
-        help="Cat style to use (default: cat). Available: " + ", ".join(CAT_STYLES.keys()),
-    )
-    parser.add_argument(
-        "-c", "--cat",
-        default=None,
-        help="Path to a custom cat image (overrides --style)",
+        help="Cat image: built-in style name (" + ", ".join(CAT_STYLES.keys()) + ") or path to a custom image (default: cat)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -680,16 +674,18 @@ def main():
     if args.name is None:
         args.name = input("Enter model name: ")
 
-    # Resolve cat image path: --cat overrides --style
-    if args.cat is None:
+    # Resolve cat image path: built-in style name or custom path
+    if args.image in CAT_STYLES:
         script_dir = Path(__file__).parent
-        args.cat = str(script_dir / CAT_STYLES[args.style])
+        cat_path = str(script_dir / CAT_STYLES[args.image])
+    else:
+        cat_path = args.image
 
     if args.output is None:
         config_stem = Path(args.config).stem
         args.output = f"excat_{config_stem}.png"
 
-    generate_excat(args.cat, args.config, args.output, args.name, args.border, args.pixelize, args.detail_radius)
+    generate_excat(cat_path, args.config, args.output, args.name, args.border, args.pixelize, args.detail_radius)
 
 
 if __name__ == "__main__":
