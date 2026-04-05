@@ -11,7 +11,7 @@ Generate a unique signature cat image for any ExLlama quantized model. Each cat 
 
 ## Color Scheme
 
-Each horizontal slice of the cat corresponds to a model layer, tinted by its average bits-per-weight. 4bpw is neutral white, 2bpw runs red hot, and 8bpw goes dark grey-purple. The background is transparent.
+Each horizontal slice of the cat corresponds to a model layer, tinted by its average bits-per-weight. 4bpw is neutral white, 2bpw runs red hot, 8bpw goes dark grey-purple, and 16bpw shines bright gold. The background is transparent.
 
 ## Fur Patterns
 

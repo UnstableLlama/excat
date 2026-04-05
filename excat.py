@@ -11,6 +11,7 @@ Color scheme (asymmetric gradient):
     2 bpw  ->  Red              (255, 0, 0)       heavily quantized
     4 bpw  ->  White            (255, 255, 255)   neutral setpoint
     8 bpw  ->  Dark grey-purple (48, 32, 64)      high fidelity
+    16 bpw ->  Gold             (255, 200, 0)     unquantized
 """
 
 import argparse
@@ -28,35 +29,39 @@ from PIL import Image
 COLOR_RED = (255, 0, 0)         # 2 bpw
 COLOR_WHITE = (255, 255, 255)   # 4 bpw
 COLOR_DEEP_PURPLE = (48, 32, 64)  # 8 bpw
+COLOR_GOLD = (255, 200, 0)       # 16 bpw
 
 BPW_LOW = 2.0
 BPW_MID = 4.0
 BPW_HIGH = 8.0
+BPW_MAX = 16.0
 
 
 def bpw_to_color(bpw: float) -> tuple[int, int, int]:
     """Convert a bits-per-weight value to an RGB color.
 
     Uses an asymmetric piecewise linear gradient:
-        [2, 4] -> Red to White            (steep: 2 bpw range)
-        [4, 8] -> White to Dark grey-purple (gentle: 4 bpw range)
+        [2, 4]  -> Red to White              (steep: 2 bpw range)
+        [4, 8]  -> White to Dark grey-purple (gentle: 4 bpw range)
+        [8, 16] -> Dark grey-purple to Gold  (8 bpw range)
     """
-    bpw = max(BPW_LOW, min(BPW_HIGH, bpw))
+    bpw = max(BPW_LOW, min(BPW_MAX, bpw))
 
     if bpw <= BPW_MID:
         t = (bpw - BPW_LOW) / (BPW_MID - BPW_LOW)
-        return (
-            int(COLOR_RED[0] + t * (COLOR_WHITE[0] - COLOR_RED[0])),
-            int(COLOR_RED[1] + t * (COLOR_WHITE[1] - COLOR_RED[1])),
-            int(COLOR_RED[2] + t * (COLOR_WHITE[2] - COLOR_RED[2])),
-        )
-    else:
+        c1, c2 = COLOR_RED, COLOR_WHITE
+    elif bpw <= BPW_HIGH:
         t = (bpw - BPW_MID) / (BPW_HIGH - BPW_MID)
-        return (
-            int(COLOR_WHITE[0] + t * (COLOR_DEEP_PURPLE[0] - COLOR_WHITE[0])),
-            int(COLOR_WHITE[1] + t * (COLOR_DEEP_PURPLE[1] - COLOR_WHITE[1])),
-            int(COLOR_WHITE[2] + t * (COLOR_DEEP_PURPLE[2] - COLOR_WHITE[2])),
-        )
+        c1, c2 = COLOR_WHITE, COLOR_DEEP_PURPLE
+    else:
+        t = (bpw - BPW_HIGH) / (BPW_MAX - BPW_HIGH)
+        c1, c2 = COLOR_DEEP_PURPLE, COLOR_GOLD
+
+    return (
+        int(c1[0] + t * (c2[0] - c1[0])),
+        int(c1[1] + t * (c2[1] - c1[1])),
+        int(c1[2] + t * (c2[2] - c1[2])),
+    )
 
 
 # ---------------------------------------------------------------------------
