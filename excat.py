@@ -480,7 +480,7 @@ def pixelize_interior(
             block_coords = []
             for y in range(by, min(by + block_size, h)):
                 for x in range(bx, min(bx + block_size, w)):
-                    if not bg_mask[y][x] and detail_buf[y][x] >= 1.0 and not eye_mask[y][x]:
+                    if not bg_mask[y][x] and detail_buf[y][x] > 0.0 and not eye_mask[y][x]:
                         block_pixels.append(pixels[x, y])
                         block_coords.append((x, y))
 
