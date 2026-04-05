@@ -8,9 +8,9 @@ average bits-per-weight of that layer. Overlays a deterministic fur pattern
 derived from the model name hash.
 
 Color scheme (asymmetric gradient):
-    2 bpw  ->  Red    (255, 0, 0)       heavily quantized
-    4 bpw  ->  Orange (255, 165, 0)     neutral setpoint
-    8 bpw  ->  Yellow (255, 255, 0)     high fidelity
+    2 bpw  ->  Red              (255, 0, 0)       heavily quantized
+    4 bpw  ->  White            (255, 255, 255)   neutral setpoint
+    8 bpw  ->  Dark grey-purple (48, 32, 64)      high fidelity
 """
 
 import argparse
@@ -27,7 +27,7 @@ from PIL import Image
 # --- Color constants ---
 COLOR_RED = (255, 0, 0)         # 2 bpw
 COLOR_WHITE = (255, 255, 255)   # 4 bpw
-COLOR_BLACK = (0, 0, 0)         # 8 bpw
+COLOR_DEEP_PURPLE = (48, 32, 64)  # 8 bpw
 
 BPW_LOW = 2.0
 BPW_MID = 4.0
@@ -38,8 +38,8 @@ def bpw_to_color(bpw: float) -> tuple[int, int, int]:
     """Convert a bits-per-weight value to an RGB color.
 
     Uses an asymmetric piecewise linear gradient:
-        [2, 4] -> Red to White   (steep: 2 bpw range)
-        [4, 8] -> White to Black (gentle: 4 bpw range)
+        [2, 4] -> Red to White            (steep: 2 bpw range)
+        [4, 8] -> White to Dark grey-purple (gentle: 4 bpw range)
     """
     bpw = max(BPW_LOW, min(BPW_HIGH, bpw))
 
@@ -53,9 +53,9 @@ def bpw_to_color(bpw: float) -> tuple[int, int, int]:
     else:
         t = (bpw - BPW_MID) / (BPW_HIGH - BPW_MID)
         return (
-            int(COLOR_WHITE[0] + t * (COLOR_BLACK[0] - COLOR_WHITE[0])),
-            int(COLOR_WHITE[1] + t * (COLOR_BLACK[1] - COLOR_WHITE[1])),
-            int(COLOR_WHITE[2] + t * (COLOR_BLACK[2] - COLOR_WHITE[2])),
+            int(COLOR_WHITE[0] + t * (COLOR_DEEP_PURPLE[0] - COLOR_WHITE[0])),
+            int(COLOR_WHITE[1] + t * (COLOR_DEEP_PURPLE[1] - COLOR_WHITE[1])),
+            int(COLOR_WHITE[2] + t * (COLOR_DEEP_PURPLE[2] - COLOR_WHITE[2])),
         )
 
 
