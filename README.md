@@ -2,26 +2,12 @@
 
 Generate a unique signature cat image for any ExLlama quantized model. Each cat is a visual fingerprint of the quantization profile -- sliced into horizontal bands (one per model layer) and tinted based on the average bits-per-weight of that layer. A deterministic fur pattern is generated from the model name, giving each model its own unique look.
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="example_qwen_cat.png" alt="Qwen 2.1bpw" width="200">
-      <div>Qwen 2.1bpw</div>
-    </td>
-    <td align="center">
-      <img src="example_ministral_cat_px.png" alt="Ministral 4bpw, pixelized" width="200">
-      <div>Ministral 4bpw, pixelized</div>
-    </td>
-    <td align="center">
-      <img src="example_qwen_pixcat_px.png" alt="Qwen 2.1bpw, pixcat + pixelized" width="200">
-      <div>Qwen 2.1bpw, pixcat + pixelized</div>
-    </td>
-    <td align="center">
-      <img src="example_ministral_pixcat.png" alt="Ministral 4bpw, pixcat" width="200">
-      <div>Ministral 4bpw, pixcat</div>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="example_qwen_cat.png" width="22%" />
+  <img src="example_ministral_cat_px.png" width="22%" />
+  <img src="example_qwen_pixcat_px.png" width="22%" />
+  <img src="example_ministral_pixcat.png" width="22%" />
+</p>
 
 ## Color Scheme
 
