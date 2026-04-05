@@ -155,7 +155,7 @@ def hash_model_name(name: str) -> dict:
     # Pattern type is based on the model family (up to first dash)
     # so all models in the same family get the same pattern type
     family = name.split("-")[0]
-    fh = hashlib.sha256(("meow" + family).encode()).hexdigest()
+    fh = hashlib.sha256(("42" + family).encode()).hexdigest()
     pattern_idx = int(fh[:2], 16) % len(PATTERN_TYPES)
 
     # Use different slices of the full hash for other parameters
