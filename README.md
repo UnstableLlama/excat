@@ -5,8 +5,8 @@ Generate a unique signature cat image for any ExLlama quantized model. Each cat 
 <p align="center">
   <img src="examples/excat_L3.1-70B-Animus-V14.0-6.5bpw.png" width="22%" />
   <img src="examples/excat_GLM-4.7-3.84bpw.png" width="22%" />
-  <img src="examples/excat_gemma-3-27b-it-3.5bpw.png" width="22%" />
   <img src="examples/excat_Ministral-3-14B-Instruct-2512-2.5bpw.png" width="22%" />
+  <img src="examples/excat_gemma-3-27b-it-3.5bpw.png" width="22%" />
 </p>
 
 ## Color Scheme
