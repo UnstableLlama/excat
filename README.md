@@ -11,11 +11,11 @@ Generate a unique signature cat image for any ExLlama quantized model. Each cat 
 
 ## Color Scheme
 
-Each horizontal slice of the cat corresponds to a model layer, tinted by its average bits-per-weight. 4bpw is neutral white, 2bpw runs red hot, and 8bpw goes black and cool. The background is transparent.
+Each horizontal slice of the cat corresponds to a model layer, tinted by its average bits-per-weight. 4bpw is neutral white, 2bpw runs red hot, and 8bpw goes dark grey-purple. The background is transparent.
 
 ## Fur Patterns
 
-The model name is hashed to deterministically generate a unique fur pattern. The hash controls the pattern type, scale, angle, density, and other parameters -- so the same model name always produces the same cat.
+The model name is hashed to deterministically generate a unique fur pattern. Two hashes are used: the model family (everything up to the first dash) is hashed to determine the pattern type, so all models in the same family share the same pattern style. The full model name is then hashed separately to derive the remaining parameters (scale, angle, density, etc.) -- so the same model name always produces the same cat.
 
 | Pattern | Description |
 |---------|-------------|
@@ -48,7 +48,7 @@ pip install Pillow
 ## How It Works
 
 1. Parses the quantization config and computes the average bpw per layer
-2. Hashes the model name to derive fur pattern parameters
+2. Hashes the model family name (up to the first dash) to pick the pattern type, then hashes the full model name to derive the remaining pattern parameters
 3. Crops the base cat image and squares it with a white border
 4. Detects background and eye whites via flood-fill so only the cat interior is colored
 5. Builds a detail buffer around outlines to protect facial features from fur markings
