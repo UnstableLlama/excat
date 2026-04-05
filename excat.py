@@ -147,9 +147,14 @@ def hash_model_name(name: str) -> dict:
     """Hash a model name and derive all pattern parameters deterministically."""
     h = hashlib.sha256(name.encode()).hexdigest()
 
-    # Use different slices of the hash for different parameters
+    # Pattern type is based on the model family (up to first dash)
+    # so all models in the same family get the same pattern type
+    family = name.split("-")[0]
+    fh = hashlib.sha256(family.encode()).hexdigest()
+    pattern_idx = int(fh[:2], 16) % len(PATTERN_TYPES)
+
+    # Use different slices of the full hash for other parameters
     seed = int(h[:8], 16)
-    pattern_idx = int(h[8:10], 16) % len(PATTERN_TYPES)
     scale = 3.0 + (int(h[10:12], 16) / 255.0) * 4.0       # 3.0 - 7.0
     threshold = 0.15 + (int(h[12:14], 16) / 255.0) * 0.20  # 0.15 - 0.35
     angle = (int(h[14:16], 16) / 255.0) * math.pi           # 0 - pi
@@ -608,39 +613,12 @@ def generate_excat(
         print(f"Pixelizing with block size {pixel_size}...")
         result = pixelize_interior(result, bg_mask, detail_buf, pixel_size)
 
-    # Black background with white outer border
+    # Transparent background
     pixels = result.load()
-    outline_width = 2
-
-    # Build the outer border: find bg pixels adjacent to non-bg pixels
-    border_pixels = set()
-    for y in range(side):
-        for x in range(side):
-            if not bg_mask[y][x]:
-                continue
-            # Check if this bg pixel is near a non-bg pixel
-            for r in range(1, outline_width + 1):
-                found = False
-                for dy in range(-r, r + 1):
-                    for dx in range(-r, r + 1):
-                        nx, ny = x + dx, y + dy
-                        if 0 <= nx < side and 0 <= ny < side and not bg_mask[ny][nx]:
-                            border_pixels.add((x, y))
-                            found = True
-                            break
-                    if found:
-                        break
-                if found:
-                    break
-
-    # Set background to black and border to white
     for y in range(side):
         for x in range(side):
             if bg_mask[y][x]:
-                if (x, y) in border_pixels:
-                    pixels[x, y] = (255, 255, 255, 255)
-                else:
-                    pixels[x, y] = (0, 0, 0, 255)
+                pixels[x, y] = (0, 0, 0, 0)
 
     result.save(output_path)
     print(f"\nSaved to {output_path} ({side}x{side}px)")

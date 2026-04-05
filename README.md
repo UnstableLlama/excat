@@ -16,7 +16,7 @@ The color gradient is asymmetric, reflecting the fact that quality loss is more 
 | 4 | White | Neutral setpoint |
 | 8 | Black | High fidelity |
 
-The gradient from 2-4 bpw (red to white) is steeper than 4-8 bpw (white to black), making aggressive low-bit quantization visually louder. The cat is displayed on a black background with a thin white border around its outer edge.
+The gradient from 2-4 bpw (red to white) is steeper than 4-8 bpw (white to black), making aggressive low-bit quantization visually louder. The background is transparent.
 
 ## Fur Patterns
 
