@@ -642,6 +642,36 @@ def generate_excat(
     cat_top = offset_y
     cat_bottom = offset_y + ch
 
+    # Build band boundaries with minimum height for embed/head layers
+    # so they're visible even with many layers
+    min_band_frac = 0.04  # embed/head get at least 4% of cat height each
+    min_band_px = max(1, int(ch * min_band_frac))
+    base_band = ch / num_layers
+
+    # If embed or head bands would be smaller than minimum, steal from interior
+    has_embed = num_layers >= 2
+    has_head = num_layers >= 2
+    embed_height = max(min_band_px, int(base_band)) if has_embed else int(base_band)
+    head_height = max(min_band_px, int(base_band)) if has_head else int(base_band)
+    interior_height = ch - embed_height - head_height
+    interior_layers = num_layers - 2 if num_layers > 2 else 0
+
+    band_tops = []
+    band_bottoms = []
+    for i in range(num_layers):
+        if i == 0:
+            band_tops.append(cat_top)
+            band_bottoms.append(cat_top + embed_height)
+        elif i == num_layers - 1:
+            band_tops.append(cat_top + ch - head_height)
+            band_bottoms.append(cat_top + ch)
+        else:
+            interior_idx = i - 1
+            t = cat_top + embed_height + int(interior_idx * interior_height / interior_layers)
+            b = cat_top + embed_height + int((interior_idx + 1) * interior_height / interior_layers)
+            band_tops.append(t)
+            band_bottoms.append(b)
+
     # Create the tinted output
     result = canvas.copy()
     pixels = result.load()
@@ -650,11 +680,7 @@ def generate_excat(
     for layer_idx, bpw in enumerate(layer_bpws):
         color = bpw_to_color(bpw)
 
-        # Map layer index to pixel rows within the cat content area
-        band_top = cat_top + int(layer_idx * ch / num_layers)
-        band_bottom = cat_top + int((layer_idx + 1) * ch / num_layers)
-
-        for y in range(band_top, band_bottom):
+        for y in range(band_tops[layer_idx], band_bottoms[layer_idx]):
             for x in range(side):
                 if bg_mask[y][x] or eye_mask[y][x]:
                     continue
