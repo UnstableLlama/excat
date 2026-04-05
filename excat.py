@@ -660,14 +660,13 @@ def main():
         help="Path to quantization_config.json",
     )
     parser.add_argument(
-        "-n", "--name",
-        default=None,
-        help="Model name (used to generate fur pattern). If not provided, will prompt.",
+        "name",
+        help="Model name (used to generate fur pattern)",
     )
     parser.add_argument(
         "-i", "--image",
-        default="cat",
-        help="Cat image: built-in style name (" + ", ".join(CAT_STYLES.keys()) + ") or path to a custom image (default: cat)",
+        default="pixcat",
+        help="Cat image: built-in style name (" + ", ".join(CAT_STYLES.keys()) + ") or path to a custom image (default: pixcat)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -683,21 +682,18 @@ def main():
     parser.add_argument(
         "-p", "--pixelize",
         type=int,
-        default=0,
+        default=5,
         metavar="SIZE",
-        help="Pixelize the fur with block size (e.g. 8). 0 = off (default)",
+        help="Pixelize the fur with block size (default: 5). 0 = off",
     )
     parser.add_argument(
         "-d", "--detail-radius",
         type=int,
-        default=2,
+        default=6,
         metavar="PX",
-        help="Buffer zone around outlines where fur markings won't appear (default: 2)",
+        help="Buffer zone around outlines where fur markings fade out (default: 6)",
     )
     args = parser.parse_args()
-
-    if args.name is None:
-        args.name = input("Enter model name: ")
 
     # Resolve cat image path: built-in style name or custom path
     if args.image in CAT_STYLES:
