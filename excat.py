@@ -289,17 +289,51 @@ def generate_pattern(w: int, h: int, params: dict) -> list[list[float]]:
 # ---------------------------------------------------------------------------
 
 def parse_quant_config(config_path: str) -> list[float]:
-    """Parse a quantization_config.json and return average bpw per layer."""
+    """Parse a quantization_config.json and return average bpw per layer.
+
+    Includes embedding and head layers as the first and last entries
+    so they show up in the cat visualization.
+    """
     with open(config_path) as f:
         data = json.load(f)
 
     tensor_storage = data.get("tensor_storage", {})
+    head_bits = data.get("head_bits")
 
+    # Collect per-layer bpw from numbered layers
     layer_bpws: dict[int, list[float]] = {}
+    embed_bpw = None
+    head_bpw = None
+
     for key, entry in tensor_storage.items():
+        bpw = entry.get("bits_per_weight")
+
+        # Detect embedding layer (no bpw = stored as float16 = 16 bpw)
+        if "embed_tokens" in key or "embed_in" in key:
+            if bpw is not None:
+                embed_bpw = bpw
+            else:
+                # Check stored tensors for dtype to infer bpw
+                stored = entry.get("stored_tensors", {})
+                for tensor_info in stored.values():
+                    dtype = tensor_info.get("dtype", "")
+                    if "float16" in dtype or "bfloat16" in dtype:
+                        embed_bpw = 16.0
+                    elif "float32" in dtype:
+                        embed_bpw = 32.0
+                    else:
+                        embed_bpw = 16.0  # reasonable default
+                    break
+            continue
+
+        # Detect head layer
+        if "lm_head" in key or "embed_out" in key:
+            if bpw is not None:
+                head_bpw = bpw
+            continue
+
         if "layers." not in key:
             continue
-        bpw = entry.get("bits_per_weight")
         if bpw is None:
             continue
         parts = key.split(".")
@@ -313,10 +347,21 @@ def parse_quant_config(config_path: str) -> list[float]:
         print("Error: No quantized layers found in config.", file=sys.stderr)
         sys.exit(1)
 
-    return [
+    # Use head_bits from top-level config as fallback for head
+    if head_bpw is None and head_bits is not None:
+        head_bpw = float(head_bits)
+
+    result = []
+    if embed_bpw is not None:
+        result.append(embed_bpw)
+    result.extend(
         sum(bpws) / len(bpws)
         for _, bpws in sorted(layer_bpws.items())
-    ]
+    )
+    if head_bpw is not None:
+        result.append(head_bpw)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
