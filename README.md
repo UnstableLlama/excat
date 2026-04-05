@@ -32,17 +32,16 @@ The model name is hashed to deterministically generate a unique fur pattern. The
 ## Usage
 
 ```
-python excat.py <quantization_config.json> [-n model_name] [-s style] [-p pixel_size] [-d radius] [-o output.png]
+python excat.py <quantization_config.json> [-n model_name] [-i image] [-p pixel_size] [-d radius] [-o output.png]
 ```
 
 **Arguments:**
 - `config` -- Path to an ExLlama `quantization_config.json`
 - `-n, --name` -- Model name for fur pattern generation (will prompt if not provided)
-- `-s, --style` -- Cat style: `cat` (default) or `pixcat`
-- `-c, --cat` -- Path to a custom cat image (overrides `--style`)
+- `-i, --image` -- Built-in style name (`cat`, `pixcat`) or path to a custom image (default: `cat`)
 - `-o, --output` -- Output path (default: `excat_<config_name>.png`)
 - `-p, --pixelize` -- Pixelize the fur with given block size (e.g. `-p 10`). Off by default
-- `-d, --detail-radius` -- Buffer zone in pixels around outlines where fur markings won't appear (default: 1)
+- `-d, --detail-radius` -- Buffer zone in pixels around outlines where fur markings won't appear (default: 2)
 - `-b, --border` -- Border padding in pixels (default: 20)
 
 **Requirements:** Python 3, Pillow
