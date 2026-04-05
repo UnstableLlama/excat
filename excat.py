@@ -644,7 +644,7 @@ def generate_excat(
 
     # Build band boundaries with minimum height for embed/head layers
     # so they're visible even with many layers
-    min_band_frac = 0.04  # embed/head get at least 4% of cat height each
+    min_band_frac = 0.02  # embed/head get at least 2% of cat height each
     min_band_px = max(1, int(ch * min_band_frac))
     base_band = ch / num_layers
 
