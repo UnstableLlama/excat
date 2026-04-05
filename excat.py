@@ -371,30 +371,31 @@ def build_background_mask(
     img: Image.Image,
     threshold: int = 230,
     eye_max_fraction: float = 0.0015,
-) -> list[list[bool]]:
+) -> tuple[list[list[bool]], list[list[bool]]]:
     """Flood-fill from image edges to identify background pixels, plus eye whites.
 
-    Returns a 2D boolean grid where True = masked (don't tint).
-    Also detects small enclosed white regions (eye whites) by finding interior
-    white blobs smaller than eye_max_fraction of total image area.
+    Returns (bg_mask, eye_mask) - two 2D boolean grids.
+    bg_mask: True = background pixel (will become transparent).
+    eye_mask: True = eye white pixel (skip tinting but keep opaque).
     """
     gray = img.convert("L")
     pixels = gray.load()
     w, h = gray.size
 
-    mask = [[False] * w for _ in range(h)]
+    bg_mask = [[False] * w for _ in range(h)]
+    eye_mask = [[False] * w for _ in range(h)]
     queue = deque()
 
     # Seed from all edge pixels that are light enough
     for x in range(w):
         for y in (0, h - 1):
-            if pixels[x, y] > threshold and not mask[y][x]:
-                mask[y][x] = True
+            if pixels[x, y] > threshold and not bg_mask[y][x]:
+                bg_mask[y][x] = True
                 queue.append((x, y))
     for y in range(h):
         for x in (0, w - 1):
-            if pixels[x, y] > threshold and not mask[y][x]:
-                mask[y][x] = True
+            if pixels[x, y] > threshold and not bg_mask[y][x]:
+                bg_mask[y][x] = True
                 queue.append((x, y))
 
     # BFS flood fill through light pixels (background)
@@ -402,9 +403,9 @@ def build_background_mask(
         cx, cy = queue.popleft()
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             nx, ny = cx + dx, cy + dy
-            if 0 <= nx < w and 0 <= ny < h and not mask[ny][nx]:
+            if 0 <= nx < w and 0 <= ny < h and not bg_mask[ny][nx]:
                 if pixels[nx, ny] > threshold:
-                    mask[ny][nx] = True
+                    bg_mask[ny][nx] = True
                     queue.append((nx, ny))
 
     # Now find small enclosed white regions (eyes, highlights, etc.)
@@ -414,7 +415,7 @@ def build_background_mask(
 
     for sy in range(h):
         for sx in range(w):
-            if visited[sy][sx] or mask[sy][sx]:
+            if visited[sy][sx] or bg_mask[sy][sx]:
                 continue
             if pixels[sx, sy] <= threshold:
                 visited[sy][sx] = True
@@ -433,12 +434,12 @@ def build_background_mask(
                         if pixels[nx, ny] > threshold:
                             queue.append((nx, ny))
 
-            # If the blob is small enough, it's likely an eye/highlight - mask it
+            # If the blob is small enough, it's likely an eye/highlight - mark as eye
             if len(blob) <= max_eye_pixels:
                 for bx, by in blob:
-                    mask[by][bx] = True
+                    eye_mask[by][bx] = True
 
-    return mask
+    return bg_mask, eye_mask
 
 
 # ---------------------------------------------------------------------------
@@ -455,12 +456,13 @@ def pixelize_interior(
     img: Image.Image,
     bg_mask: list[list[bool]],
     detail_buf: list[list[bool]],
+    eye_mask: list[list[bool]],
     block_size: int = 8,
 ) -> Image.Image:
     """Pixelize only the interior (non-masked) pixels of the image.
 
-    Detail buffer pixels are excluded from averaging so the clean
-    quant-colored border around outlines is preserved.
+    Detail buffer and eye pixels are excluded from averaging so the clean
+    quant-colored border around outlines and eye whites are preserved.
     """
     result = img.copy()
     pixels = result.load()
@@ -468,12 +470,12 @@ def pixelize_interior(
 
     for by in range(0, h, block_size):
         for bx in range(0, w, block_size):
-            # Collect pixels eligible for pixelization (interior, not detail buffer)
+            # Collect pixels eligible for pixelization (interior, not detail buffer or eyes)
             block_pixels = []
             block_coords = []
             for y in range(by, min(by + block_size, h)):
                 for x in range(bx, min(bx + block_size, w)):
-                    if not bg_mask[y][x] and not detail_buf[y][x]:
+                    if not bg_mask[y][x] and not detail_buf[y][x] and not eye_mask[y][x]:
                         block_pixels.append(pixels[x, y])
                         block_coords.append((x, y))
 
@@ -557,7 +559,7 @@ def generate_excat(
     canvas.paste(cat_cropped, (offset_x, offset_y), cat_cropped)
 
     # Build background mask via flood-fill from edges
-    bg_mask = build_background_mask(canvas)
+    bg_mask, eye_mask = build_background_mask(canvas)
 
     # Build detail buffer to protect outlines from fur markings
     detail_buf = build_detail_buffer(canvas, radius=detail_radius)
@@ -584,7 +586,7 @@ def generate_excat(
 
         for y in range(band_top, band_bottom):
             for x in range(side):
-                if bg_mask[y][x]:
+                if bg_mask[y][x] or eye_mask[y][x]:
                     continue
                 r, g, b, a = pixels[x, y]
                 brightness = (r + g + b) / 3
@@ -611,7 +613,7 @@ def generate_excat(
     # Optional pixelization pass
     if pixel_size > 0:
         print(f"Pixelizing with block size {pixel_size}...")
-        result = pixelize_interior(result, bg_mask, detail_buf, pixel_size)
+        result = pixelize_interior(result, bg_mask, detail_buf, eye_mask, pixel_size)
 
     # Transparent background
     pixels = result.load()
