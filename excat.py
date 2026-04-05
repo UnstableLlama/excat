@@ -480,7 +480,7 @@ def pixelize_interior(
             block_coords = []
             for y in range(by, min(by + block_size, h)):
                 for x in range(bx, min(bx + block_size, w)):
-                    if not bg_mask[y][x] and not detail_buf[y][x] and not eye_mask[y][x]:
+                    if not bg_mask[y][x] and detail_buf[y][x] >= 1.0 and not eye_mask[y][x]:
                         block_pixels.append(pixels[x, y])
                         block_coords.append((x, y))
 
@@ -500,26 +500,46 @@ def pixelize_interior(
     return result
 
 
-def build_detail_buffer(img: Image.Image, radius: int = 1, dark_threshold: int = 100) -> list[list[bool]]:
-    """Create a buffer zone around dark pixels (outlines/details).
+def build_detail_buffer(img: Image.Image, radius: int = 1, dark_threshold: int = 100) -> list[list[float]]:
+    """Create a falloff buffer around dark pixels (outlines/details).
 
-    Returns a 2D boolean grid where True = near an outline (don't apply fur).
+    Returns a 2D grid of floats in [0.0, 1.0]:
+        0.0 = on or immediately adjacent to an outline (no fur)
+        1.0 = far from any outline (full fur)
+    Values between 0 and 1 provide a smooth gradient for fading fur markings.
     """
     gray = img.convert("L")
     pixels = gray.load()
     w, h = gray.size
 
-    buffer = [[False] * w for _ in range(h)]
+    # BFS distance from nearest dark pixel, capped at radius
+    dist = [[radius + 1] * w for _ in range(h)]
+    queue = deque()
 
-    # Find all dark pixels, then mark their neighbors within radius
+    # Seed with all dark pixels at distance 0
     for y in range(h):
         for x in range(w):
             if pixels[x, y] < dark_threshold:
-                for dy in range(-radius, radius + 1):
-                    for dx in range(-radius, radius + 1):
-                        nx, ny = x + dx, y + dy
-                        if 0 <= nx < w and 0 <= ny < h:
-                            buffer[ny][nx] = True
+                dist[y][x] = 0
+                queue.append((x, y))
+
+    # BFS to compute Manhattan-ish distance up to radius
+    while queue:
+        cx, cy = queue.popleft()
+        d = dist[cy][cx]
+        if d >= radius:
+            continue
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < w and 0 <= ny < h and dist[ny][nx] > d + 1:
+                dist[ny][nx] = d + 1
+                queue.append((nx, ny))
+
+    # Convert distance to falloff: 0 at outline, 1 at radius+
+    buffer = [[0.0] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            buffer[y][x] = min(dist[y][x] / radius, 1.0) if radius > 0 else (0.0 if dist[y][x] == 0 else 1.0)
 
     return buffer
 
@@ -596,22 +616,22 @@ def generate_excat(
                 r, g, b, a = pixels[x, y]
                 brightness = (r + g + b) / 3
                 if brightness > 120:
-                    # Detail buffer pixels get full tint to avoid white halos
-                    if detail_buf[y][x]:
-                        blend = 1.0
+                    detail_falloff = detail_buf[y][x]  # 0.0 near outline, 1.0 far
+                    # Near outlines, use full tint to avoid white halos
+                    if detail_falloff < 1.0:
+                        blend = 1.0 * (1.0 - detail_falloff) + min(1.0, (brightness - 120) / 135.0) * detail_falloff
                     else:
                         blend = min(1.0, (brightness - 120) / 135.0)
                     nr = int(r + blend * (color[0] - r))
                     ng = int(g + blend * (color[1] - g))
                     nb = int(b + blend * (color[2] - b))
 
-                    # Apply fur pattern, but not in the detail buffer zone
-                    if not detail_buf[y][x]:
-                        fur = fur_pattern[y][x]
-                        if fur > 0:
-                            nr = int(nr * (1.0 - fur))
-                            ng = int(ng * (1.0 - fur))
-                            nb = int(nb * (1.0 - fur))
+                    # Apply fur pattern, fading out near outlines
+                    fur = fur_pattern[y][x] * detail_falloff
+                    if fur > 0:
+                        nr = int(nr * (1.0 - fur))
+                        ng = int(ng * (1.0 - fur))
+                        nb = int(nb * (1.0 - fur))
 
                     pixels[x, y] = (nr, ng, nb, a)
 
