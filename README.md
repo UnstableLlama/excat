@@ -8,15 +8,7 @@ Generate a unique signature cat image for any ExLlama quantized model. Each cat 
 
 ## Color Scheme
 
-The color gradient is asymmetric, reflecting the fact that quality loss is more dramatic at lower bit depths:
-
-| bpw | Color | Meaning |
-|-----|-------|---------|
-| 2 | Red | Heavily quantized |
-| 4 | White | Neutral setpoint |
-| 8 | Black | High fidelity |
-
-The gradient from 2-4 bpw (red to white) is steeper than 4-8 bpw (white to black), making aggressive low-bit quantization visually louder. The background is transparent.
+Each horizontal slice of the cat corresponds to a model layer, tinted by its average bits-per-weight. 4bpw is neutral white, 2bpw runs red hot, and 8bpw goes black and cool. The background is transparent.
 
 ## Fur Patterns
 
