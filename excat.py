@@ -25,9 +25,9 @@ from PIL import Image
 
 
 # --- Color constants ---
-COLOR_RED = (255, 0, 0)       # 2 bpw
-COLOR_ORANGE = (255, 140, 0)  # 4 bpw
-COLOR_YELLOW = (255, 255, 0)  # 8 bpw
+COLOR_RED = (255, 0, 0)         # 2 bpw
+COLOR_WHITE = (255, 255, 255)   # 4 bpw
+COLOR_BLACK = (0, 0, 0)         # 8 bpw
 
 BPW_LOW = 2.0
 BPW_MID = 4.0
@@ -38,24 +38,24 @@ def bpw_to_color(bpw: float) -> tuple[int, int, int]:
     """Convert a bits-per-weight value to an RGB color.
 
     Uses an asymmetric piecewise linear gradient:
-        [2, 4] -> Red to Orange   (steep: 2 bpw range)
-        [4, 8] -> Orange to Yellow (gentle: 4 bpw range)
+        [2, 4] -> Red to White   (steep: 2 bpw range)
+        [4, 8] -> White to Black (gentle: 4 bpw range)
     """
     bpw = max(BPW_LOW, min(BPW_HIGH, bpw))
 
     if bpw <= BPW_MID:
         t = (bpw - BPW_LOW) / (BPW_MID - BPW_LOW)
         return (
-            int(COLOR_RED[0] + t * (COLOR_ORANGE[0] - COLOR_RED[0])),
-            int(COLOR_RED[1] + t * (COLOR_ORANGE[1] - COLOR_RED[1])),
-            int(COLOR_RED[2] + t * (COLOR_ORANGE[2] - COLOR_RED[2])),
+            int(COLOR_RED[0] + t * (COLOR_WHITE[0] - COLOR_RED[0])),
+            int(COLOR_RED[1] + t * (COLOR_WHITE[1] - COLOR_RED[1])),
+            int(COLOR_RED[2] + t * (COLOR_WHITE[2] - COLOR_RED[2])),
         )
     else:
         t = (bpw - BPW_MID) / (BPW_HIGH - BPW_MID)
         return (
-            int(COLOR_ORANGE[0] + t * (COLOR_YELLOW[0] - COLOR_ORANGE[0])),
-            int(COLOR_ORANGE[1] + t * (COLOR_YELLOW[1] - COLOR_ORANGE[1])),
-            int(COLOR_ORANGE[2] + t * (COLOR_YELLOW[2] - COLOR_ORANGE[2])),
+            int(COLOR_WHITE[0] + t * (COLOR_BLACK[0] - COLOR_WHITE[0])),
+            int(COLOR_WHITE[1] + t * (COLOR_BLACK[1] - COLOR_WHITE[1])),
+            int(COLOR_WHITE[2] + t * (COLOR_BLACK[2] - COLOR_WHITE[2])),
         )
 
 
@@ -607,6 +607,40 @@ def generate_excat(
     if pixel_size > 0:
         print(f"Pixelizing with block size {pixel_size}...")
         result = pixelize_interior(result, bg_mask, detail_buf, pixel_size)
+
+    # Black background with white outer border
+    pixels = result.load()
+    outline_width = 2
+
+    # Build the outer border: find bg pixels adjacent to non-bg pixels
+    border_pixels = set()
+    for y in range(side):
+        for x in range(side):
+            if not bg_mask[y][x]:
+                continue
+            # Check if this bg pixel is near a non-bg pixel
+            for r in range(1, outline_width + 1):
+                found = False
+                for dy in range(-r, r + 1):
+                    for dx in range(-r, r + 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < side and 0 <= ny < side and not bg_mask[ny][nx]:
+                            border_pixels.add((x, y))
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    break
+
+    # Set background to black and border to white
+    for y in range(side):
+        for x in range(side):
+            if bg_mask[y][x]:
+                if (x, y) in border_pixels:
+                    pixels[x, y] = (255, 255, 255, 255)
+                else:
+                    pixels[x, y] = (0, 0, 0, 255)
 
     result.save(output_path)
     print(f"\nSaved to {output_path} ({side}x{side}px)")
