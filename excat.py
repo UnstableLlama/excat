@@ -147,9 +147,14 @@ def hash_model_name(name: str) -> dict:
     """Hash a model name and derive all pattern parameters deterministically."""
     h = hashlib.sha256(name.encode()).hexdigest()
 
-    # Use different slices of the hash for different parameters
+    # Pattern type is based on the model family (up to first dash)
+    # so all models in the same family get the same pattern type
+    family = name.split("-")[0]
+    fh = hashlib.sha256(family.encode()).hexdigest()
+    pattern_idx = int(fh[:2], 16) % len(PATTERN_TYPES)
+
+    # Use different slices of the full hash for other parameters
     seed = int(h[:8], 16)
-    pattern_idx = int(h[8:10], 16) % len(PATTERN_TYPES)
     scale = 3.0 + (int(h[10:12], 16) / 255.0) * 4.0       # 3.0 - 7.0
     threshold = 0.15 + (int(h[12:14], 16) / 255.0) * 0.20  # 0.15 - 0.35
     angle = (int(h[14:16], 16) / 255.0) * math.pi           # 0 - pi
